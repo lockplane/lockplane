@@ -3,6 +3,7 @@ package schema
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/lockplane/lockplane/internal/database"
@@ -399,5 +400,125 @@ func TestLoadSchemaMultipleFilesInOrder(t *testing.T) {
 	comments := schema.Tables[2]
 	if comments.Name != "comments" {
 		t.Errorf("Expected third table to be 'comments', got %q", comments.Name)
+	}
+}
+
+func TestLoadSchemaDuplicateTableInSameFile(t *testing.T) {
+	tempDir := t.TempDir()
+	sqlFile := filepath.Join(tempDir, "duplicate.lp.sql")
+
+	// Define the same table twice in one file
+	sqlContent := `
+		CREATE TABLE users (id INTEGER);
+		CREATE TABLE users (id BIGINT, email TEXT);
+	`
+	if err := os.WriteFile(sqlFile, []byte(sqlContent), 0600); err != nil {
+		t.Fatalf("Failed to write SQL file: %v", err)
+	}
+
+	_, err := LoadSchema(sqlFile)
+	if err == nil {
+		t.Fatal("Expected error for duplicate table definition, got nil")
+	}
+
+	expectedErr := `table "users" is defined multiple times`
+	if err.Error() != expectedErr {
+		t.Errorf("Expected error %q, got %q", expectedErr, err.Error())
+	}
+}
+
+func TestLoadSchemaDuplicateTableAcrossFiles(t *testing.T) {
+	tempDir := t.TempDir()
+
+	// First file
+	file1 := filepath.Join(tempDir, "users1.lp.sql")
+	if err := os.WriteFile(file1, []byte(`CREATE TABLE users (id INTEGER);`), 0600); err != nil {
+		t.Fatalf("Failed to write file1: %v", err)
+	}
+
+	// Second file with duplicate table
+	file2 := filepath.Join(tempDir, "users2.lp.sql")
+	if err := os.WriteFile(file2, []byte(`CREATE TABLE users (id BIGINT);`), 0600); err != nil {
+		t.Fatalf("Failed to write file2: %v", err)
+	}
+
+	_, err := LoadSchema(tempDir)
+	if err == nil {
+		t.Fatal("Expected error for duplicate table across files, got nil")
+	}
+
+	expectedErr := `table "users" is defined multiple times`
+	if err.Error() != expectedErr {
+		t.Errorf("Expected error %q, got %q", expectedErr, err.Error())
+	}
+}
+
+func TestLoadSchemaMultipleDuplicateTables(t *testing.T) {
+	tempDir := t.TempDir()
+
+	// First file
+	file1 := filepath.Join(tempDir, "01_tables.lp.sql")
+	if err := os.WriteFile(file1, []byte(`
+		CREATE TABLE users (id INTEGER);
+		CREATE TABLE posts (id INTEGER);
+	`), 0600); err != nil {
+		t.Fatalf("Failed to write file1: %v", err)
+	}
+
+	// Second file with multiple duplicates
+	file2 := filepath.Join(tempDir, "02_duplicates.lp.sql")
+	if err := os.WriteFile(file2, []byte(`
+		CREATE TABLE users (id BIGINT);
+		CREATE TABLE posts (id BIGINT);
+	`), 0600); err != nil {
+		t.Fatalf("Failed to write file2: %v", err)
+	}
+
+	_, err := LoadSchema(tempDir)
+	if err == nil {
+		t.Fatal("Expected error for multiple duplicate tables, got nil")
+	}
+
+	// Should mention multiple tables
+	if !strings.Contains(err.Error(), "users") {
+		t.Errorf("Expected error to mention 'users', got %q", err.Error())
+	}
+	if !strings.Contains(err.Error(), "posts") {
+		t.Errorf("Expected error to mention 'posts', got %q", err.Error())
+	}
+	if !strings.Contains(err.Error(), "defined multiple times") {
+		t.Errorf("Expected error to say 'defined multiple times', got %q", err.Error())
+	}
+}
+
+func TestLoadSchemaDuplicateWithOtherTables(t *testing.T) {
+	tempDir := t.TempDir()
+
+	file1 := filepath.Join(tempDir, "01_schema.lp.sql")
+	if err := os.WriteFile(file1, []byte(`
+		CREATE TABLE users (id INTEGER);
+		CREATE TABLE posts (id INTEGER);
+		CREATE TABLE comments (id INTEGER);
+	`), 0600); err != nil {
+		t.Fatalf("Failed to write file1: %v", err)
+	}
+
+	file2 := filepath.Join(tempDir, "02_duplicate.lp.sql")
+	if err := os.WriteFile(file2, []byte(`
+		CREATE TABLE tags (id INTEGER);
+		CREATE TABLE posts (id BIGINT);
+	`), 0600); err != nil {
+		t.Fatalf("Failed to write file2: %v", err)
+	}
+
+	_, err := LoadSchema(tempDir)
+	if err == nil {
+		t.Fatal("Expected error for duplicate 'posts' table, got nil")
+	}
+
+	// Should specifically mention the duplicate table
+	expectedErr := `table "posts" is defined multiple times`
+	if err.Error() != expectedErr {
+		t.Errorf("Expected error %q, got %q", expectedErr, err.Error())
 	}
 }
