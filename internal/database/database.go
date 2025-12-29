@@ -18,7 +18,7 @@ type Table struct {
 	Columns []Column `json:"columns"`
 	// Indexes     []Index      `json:"indexes"`
 	// ForeignKeys []ForeignKey `json:"foreign_keys,omitempty"`
-	RLSEnabled bool `json:"rls_enabled,omitempty"`
+	RLSEnabled bool `json:"rls_enabled"`
 	// Policies    []Policy     `json:"policies,omitempty"` // Row Level Security policies
 }
 
