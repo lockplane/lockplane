@@ -10,16 +10,21 @@ import (
 
 // ParseSQLSchemaWithDialect parses SQL DDL for the requested dialect.
 func ParseSQLSchemaWithDialect(sql string, dialect database.Dialect) (*database.Schema, error) {
+	return ParseSQLSchemaWithDialectAndFilename(sql, dialect, "")
+}
+
+// ParseSQLSchemaWithDialectAndFilename parses SQL DDL for the requested dialect with filename tracking.
+func ParseSQLSchemaWithDialectAndFilename(sql string, dialect database.Dialect, filename string) (*database.Schema, error) {
 	switch dialect {
 	case database.DialectPostgres:
-		return parsePostgresSQLSchema(sql)
+		return parsePostgresSQLSchemaWithFilename(sql, filename)
 	default:
 		return nil, fmt.Errorf("unsupported dialect %v", dialect)
 	}
 }
 
-// parsePostgresSQLSchema parses SQL DDL via pg_query for PostgreSQL schemas.
-func parsePostgresSQLSchema(sql string) (*database.Schema, error) {
+// parsePostgresSQLSchemaWithFilename parses SQL DDL via pg_query for PostgreSQL schemas with filename tracking.
+func parsePostgresSQLSchemaWithFilename(sql string, filename string) (*database.Schema, error) {
 	// Parse the SQL
 	tree, err := pg_query.Parse(sql)
 	if err != nil {
@@ -31,15 +36,24 @@ func parsePostgresSQLSchema(sql string) (*database.Schema, error) {
 		Dialect: database.DialectPostgres,
 	}
 
+	// Create a parser context that tracks the SQL for location info
+	ctx := &parseContext{
+		sql:      sql,
+		filename: filename,
+	}
+
 	// Walk the parse tree
 	for _, stmt := range tree.Stmts {
 		if stmt.Stmt == nil {
 			continue
 		}
 
+		// Get statement location (byte offset in SQL)
+		stmtLocation := stmt.StmtLocation
+
 		switch node := stmt.Stmt.Node.(type) {
 		case *pg_query.Node_CreateStmt:
-			table, err := parseCreateTable(node.CreateStmt)
+			table, err := parseCreateTable(node.CreateStmt, ctx, stmtLocation)
 			if err != nil {
 				return nil, fmt.Errorf("failed to parse CREATE TABLE: %w", err)
 			}
@@ -64,11 +78,41 @@ func parsePostgresSQLSchema(sql string) (*database.Schema, error) {
 	return schema, nil
 }
 
+// parseContext holds context information during parsing
+type parseContext struct {
+	sql      string
+	filename string
+}
+
+// byteOffsetToLineColumn converts a byte offset in SQL to line and column numbers
+func byteOffsetToLineColumn(sql string, offset int32) (line int, column int) {
+	if offset < 0 || int(offset) > len(sql) {
+		return 1, 1
+	}
+
+	line = 1
+	column = 1
+
+	for i := 0; i < int(offset); i++ {
+		if sql[i] == '\n' {
+			line++
+			column = 1
+		} else {
+			column++
+		}
+	}
+
+	return line, column
+}
+
 // parseCreateTable converts a CreateStmt AST node to a Table
-func parseCreateTable(stmt *pg_query.CreateStmt) (*database.Table, error) {
+func parseCreateTable(stmt *pg_query.CreateStmt, ctx *parseContext, stmtLocation int32) (*database.Table, error) {
 	if stmt.Relation == nil {
 		return nil, fmt.Errorf("CREATE TABLE missing relation")
 	}
+
+	// Calculate source location
+	line, column := byteOffsetToLineColumn(ctx.sql, stmtLocation)
 
 	table := &database.Table{
 		Name:    stmt.Relation.Relname,
@@ -76,6 +120,11 @@ func parseCreateTable(stmt *pg_query.CreateStmt) (*database.Table, error) {
 		Columns: []database.Column{},
 		// Indexes:     []database.Index{},
 		// ForeignKeys: []database.ForeignKey{},
+		SourceLocation: &database.SourceLocation{
+			File:   ctx.filename,
+			Line:   line,
+			Column: column,
+		},
 	}
 
 	// Parse columns and constraints
