@@ -159,7 +159,8 @@ func equalDefaults(a, b *string) bool {
 func (d *TableDiff) IsEmpty() bool {
 	return len(d.AddedColumns) == 0 &&
 		len(d.RemovedColumns) == 0 &&
-		len(d.ModifiedColumns) == 0
+		len(d.ModifiedColumns) == 0 &&
+		!d.RLSChanged
 }
 
 // IsEmpty returns true if there are no differences

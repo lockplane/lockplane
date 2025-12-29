@@ -737,3 +737,49 @@ func TestGenerator_GenerateMigration_AddAndRemoveColumns(t *testing.T) {
 		t.Error("Expected DROP COLUMN statement for old_field")
 	}
 }
+
+func TestGenerator_GenerateMigration_RLSWithColumnsAndOtherChanges(t *testing.T) {
+	// End-to-end test: Verify that RLS changes work correctly in combination
+	// with other table modifications (columns, constraints, etc.)
+	gen := NewGenerator()
+
+	diff := &schema.SchemaDiff{
+		ModifiedTables: []schema.TableDiff{
+			{
+				TableName: "users",
+				AddedColumns: []database.Column{
+					{Name: "phone", Type: "text", Nullable: true},
+				},
+				RemovedColumns: []database.Column{
+					{Name: "deprecated", Type: "text"},
+				},
+				ModifiedColumns: []schema.ColumnDiff{
+					{
+						ColumnName: "age",
+						Old:        database.Column{Name: "age", Type: "integer"},
+						New:        database.Column{Name: "age", Type: "bigint"},
+						Changes:    []string{"type"},
+					},
+				},
+				RLSChanged: true,
+				RLSEnabled: true,
+			},
+		},
+	}
+
+	sql := gen.GenerateMigration(diff)
+
+	// Verify all changes are present in the migration
+	if !strings.Contains(sql, "ALTER TABLE users ADD COLUMN phone text") {
+		t.Error("Expected ADD COLUMN statement")
+	}
+	if !strings.Contains(sql, "ALTER TABLE users DROP COLUMN deprecated") {
+		t.Error("Expected DROP COLUMN statement")
+	}
+	if !strings.Contains(sql, "ALTER TABLE users ALTER COLUMN age TYPE bigint") {
+		t.Error("Expected ALTER COLUMN statement")
+	}
+	if !strings.Contains(sql, "ALTER TABLE users ENABLE ROW LEVEL SECURITY") {
+		t.Error("Expected ENABLE RLS statement")
+	}
+}

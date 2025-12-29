@@ -559,6 +559,15 @@ func TestTableDiff_IsEmpty(t *testing.T) {
 			},
 			expected: false,
 		},
+		{
+			name: "with RLS change only",
+			diff: &TableDiff{
+				TableName:  "users",
+				RLSChanged: true,
+				RLSEnabled: true,
+			},
+			expected: false,
+		},
 	}
 
 	for _, tt := range tests {
@@ -825,5 +834,53 @@ func TestDiffTables_RLSUnchanged(t *testing.T) {
 
 	if diff.RLSChanged {
 		t.Error("Expected RLSChanged to be false when RLS status is unchanged")
+	}
+}
+
+func TestDiffSchemas_RLSOnlyChange(t *testing.T) {
+	// Test that a schema diff with only RLS changes is correctly detected
+	current := &database.Schema{
+		Tables: []database.Table{
+			{
+				Name:       "users",
+				RLSEnabled: false,
+				Columns: []database.Column{
+					{Name: "id", Type: "integer"},
+				},
+			},
+		},
+	}
+
+	desired := &database.Schema{
+		Tables: []database.Table{
+			{
+				Name:       "users",
+				RLSEnabled: true,
+				Columns: []database.Column{
+					{Name: "id", Type: "integer"},
+				},
+			},
+		},
+	}
+
+	diff := DiffSchemas(current, desired)
+
+	if diff.IsEmpty() {
+		t.Error("Expected diff to NOT be empty when RLS changes")
+	}
+
+	if len(diff.ModifiedTables) != 1 {
+		t.Fatalf("Expected 1 modified table, got %d", len(diff.ModifiedTables))
+	}
+
+	tableDiff := diff.ModifiedTables[0]
+	if !tableDiff.RLSChanged {
+		t.Error("Expected RLSChanged to be true")
+	}
+	if !tableDiff.RLSEnabled {
+		t.Error("Expected RLSEnabled to be true")
+	}
+	if tableDiff.IsEmpty() {
+		t.Error("Expected TableDiff to NOT be empty when RLS changes")
 	}
 }
