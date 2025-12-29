@@ -47,6 +47,14 @@ Help: lockplane check --help
 	}
 	schemaPath := args[0]
 
+	// Validate that conflicting flags aren't used together
+	if checkPrintSchema && checkOutput == "json" {
+		fmt.Fprintf(os.Stderr, "Error: --print-schema and --output json cannot be used together\n")
+		fmt.Fprintf(os.Stderr, "  --print-schema: prints the parsed schema structure\n")
+		fmt.Fprintf(os.Stderr, "  --output json: prints validation diagnostics\n")
+		os.Exit(1)
+	}
+
 	// If --print-schema flag is set, load and print the schema as JSON
 	if checkPrintSchema {
 		loadedSchema, err := schema.LoadSchema(schemaPath)
