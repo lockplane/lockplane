@@ -51,8 +51,7 @@ If no schema is specified in `CREATE TABLE`, Lockplane assumes the `public` sche
 ## 4. Check the schema for issues
 
 ```bash
-# TODO
-npx lockplane check-schema
+lockplane check schema/
 ```
 
 ## 4. Apply changes
