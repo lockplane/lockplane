@@ -11,7 +11,7 @@ export interface CheckResult {
 }
 
 /**
- * Lockplane CLI diagnostic output structure (from plan --check-schema --output json)
+ * Lockplane CLI diagnostic output structure (from check --output json)
  */
 export interface LockplaneDiagnostic {
   code?: string;
@@ -60,7 +60,7 @@ export async function checkSchema(schemaPath: string): Promise<CheckResult[]> {
     const workspaceFolders = vscode.workspace.workspaceFolders;
     const cwd = workspaceFolders ? workspaceFolders[0].uri.fsPath : undefined;
 
-    const cmd = `${lockplanePath} check-schema --output json "${schemaPath}"`;
+    const cmd = `${lockplanePath} check --output json "${schemaPath}"`;
 
     console.log(`[Lockplane] Running command: ${cmd}`);
     console.log(`[Lockplane] Working directory: ${cwd}`);
@@ -87,7 +87,7 @@ export async function checkSchema(schemaPath: string): Promise<CheckResult[]> {
           return;
         }
 
-        // Parse JSON output from plan --check-schema command
+        // Parse JSON output from check command
         try {
           const output = JSON.parse(stdout);
           console.log(`[Lockplane] Check output:`, output);
