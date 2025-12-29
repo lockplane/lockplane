@@ -5,6 +5,13 @@ type Dialect string
 
 const DialectPostgres Dialect = "postgres"
 
+// SourceLocation represents the location of a schema element in a source file
+type SourceLocation struct {
+	File   string `json:"file,omitempty"`
+	Line   int    `json:"line,omitempty"`
+	Column int    `json:"column,omitempty"`
+}
+
 // Schema represents a database schema
 type Schema struct {
 	Tables  []Table `json:"tables"`
@@ -20,6 +27,9 @@ type Table struct {
 	// ForeignKeys []ForeignKey `json:"foreign_keys,omitempty"`
 	RLSEnabled bool `json:"rls_enabled"`
 	// Policies    []Policy     `json:"policies,omitempty"` // Row Level Security policies
+
+	// Source location metadata (not included in JSON output, used for diagnostics)
+	SourceLocation *SourceLocation `json:"-"`
 }
 
 // Column represents a table column

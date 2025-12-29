@@ -35,6 +35,10 @@ This repository is **NOT a fork**. We work directly on branches in `origin` (loc
   ```bash
   gh pr create --title "Clear title" --body "Detailed description"
   ```
+- [ ] **IMPORTANT**: Always specify `--base` and `--head` explicitly to avoid ambiguity:
+  ```bash
+  gh pr create --repo lockplane/lockplane --base main --head lockplane:branch-name --title "..." --body "..."
+  ```
 - [ ] **NEVER** use `--web` flag (makes user enter details manually)
 - [ ] Include in PR body:
   - Summary of what changed

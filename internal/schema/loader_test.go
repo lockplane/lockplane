@@ -422,8 +422,8 @@ func TestLoadSchemaDuplicateTableInSameFile(t *testing.T) {
 	}
 
 	expectedErr := `table "public.users" is defined multiple times`
-	if err.Error() != expectedErr {
-		t.Errorf("Expected error %q, got %q", expectedErr, err.Error())
+	if !strings.Contains(err.Error(), expectedErr) {
+		t.Errorf("Expected error to contain %q, got %q", expectedErr, err.Error())
 	}
 }
 
@@ -448,8 +448,8 @@ func TestLoadSchemaDuplicateTableAcrossFiles(t *testing.T) {
 	}
 
 	expectedErr := `table "public.users" is defined multiple times`
-	if err.Error() != expectedErr {
-		t.Errorf("Expected error %q, got %q", expectedErr, err.Error())
+	if !strings.Contains(err.Error(), expectedErr) {
+		t.Errorf("Expected error to contain %q, got %q", expectedErr, err.Error())
 	}
 }
 
@@ -518,8 +518,8 @@ func TestLoadSchemaDuplicateWithOtherTables(t *testing.T) {
 
 	// Should specifically mention the duplicate table with schema
 	expectedErr := `table "public.posts" is defined multiple times`
-	if err.Error() != expectedErr {
-		t.Errorf("Expected error %q, got %q", expectedErr, err.Error())
+	if !strings.Contains(err.Error(), expectedErr) {
+		t.Errorf("Expected error to contain %q, got %q", expectedErr, err.Error())
 	}
 }
 
@@ -584,8 +584,8 @@ func TestLoadSchemaDuplicateImplicitAndExplicitPublic(t *testing.T) {
 	}
 
 	expectedErr := `table "public.users" is defined multiple times`
-	if err.Error() != expectedErr {
-		t.Errorf("Expected error %q, got %q", expectedErr, err.Error())
+	if !strings.Contains(err.Error(), expectedErr) {
+		t.Errorf("Expected error to contain %q, got %q", expectedErr, err.Error())
 	}
 }
 

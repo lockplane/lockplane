@@ -11,10 +11,12 @@ import (
 )
 
 var checkPrintSchema bool
+var checkOutput string
 
 func init() {
 	rootCmd.AddCommand(checkCmd)
 	checkCmd.Flags().BoolVar(&checkPrintSchema, "print-schema", false, "Print the parsed schema as JSON to stdout")
+	checkCmd.Flags().StringVar(&checkOutput, "output", "", "Output format: 'json' for structured diagnostics")
 }
 
 var checkCmd = &cobra.Command{
@@ -45,6 +47,14 @@ Help: lockplane check --help
 	}
 	schemaPath := args[0]
 
+	// Validate that conflicting flags aren't used together
+	if checkPrintSchema && checkOutput == "json" {
+		fmt.Fprintf(os.Stderr, "Error: --print-schema and --output json cannot be used together\n")
+		fmt.Fprintf(os.Stderr, "  --print-schema: prints the parsed schema structure\n")
+		fmt.Fprintf(os.Stderr, "  --output json: prints validation diagnostics\n")
+		os.Exit(1)
+	}
+
 	// If --print-schema flag is set, load and print the schema as JSON
 	if checkPrintSchema {
 		loadedSchema, err := schema.LoadSchema(schemaPath)
@@ -61,10 +71,21 @@ Help: lockplane check --help
 		return
 	}
 
-	// Normal check behavior
-	reportJson, err := schema.CheckSchema(schemaPath)
-	if err != nil {
-		log.Fatalf("Failed to check schema: %v", err)
+	// If --output json is set, return structured diagnostics
+	if checkOutput == "json" {
+		reportJson, err := schema.CheckSchema(schemaPath)
+		if err != nil {
+			log.Fatalf("Failed to check schema: %v", err)
+		}
+		fmt.Print(reportJson)
+		return
 	}
-	fmt.Print(reportJson)
+
+	// Default behavior: validate and print human-readable output
+	_, err := schema.LoadSchema(schemaPath)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		os.Exit(1)
+	}
+	fmt.Println("✓ Schema is valid")
 }
