@@ -884,3 +884,92 @@ func TestParseRLSMultipleTables(t *testing.T) {
 		t.Error("Expected posts table to have RLS disabled")
 	}
 }
+
+func TestParseAlterTableDefaultsToPublicSchema(t *testing.T) {
+	// Test that ALTER TABLE without schema qualifier defaults to public schema,
+	// not the first matching table name
+	sql := `
+		CREATE TABLE auth.users (id INTEGER);
+		CREATE TABLE public.users (id INTEGER);
+		ALTER TABLE users ENABLE ROW LEVEL SECURITY;
+	`
+
+	schema, err := ParseSQLSchemaWithDialect(sql, database.DialectPostgres)
+	if err != nil {
+		t.Fatalf("ParseSQLSchemaWithDialect failed: %v", err)
+	}
+
+	if len(schema.Tables) != 2 {
+		t.Fatalf("Expected 2 tables, got %d", len(schema.Tables))
+	}
+
+	// Find auth.users and public.users
+	var authUsers, publicUsers *database.Table
+	for i := range schema.Tables {
+		if schema.Tables[i].Name == "users" && schema.Tables[i].Schema == "auth" {
+			authUsers = &schema.Tables[i]
+		}
+		if schema.Tables[i].Name == "users" && schema.Tables[i].Schema == "public" {
+			publicUsers = &schema.Tables[i]
+		}
+	}
+
+	if authUsers == nil {
+		t.Fatal("Expected to find auth.users table")
+	}
+	if publicUsers == nil {
+		t.Fatal("Expected to find public.users table")
+	}
+
+	// ALTER TABLE users (without schema) should only affect public.users
+	if authUsers.RLSEnabled {
+		t.Error("Expected auth.users to have RLS disabled (ALTER TABLE should not affect it)")
+	}
+	if !publicUsers.RLSEnabled {
+		t.Error("Expected public.users to have RLS enabled (ALTER TABLE should affect it)")
+	}
+}
+
+func TestParseAlterTableExplicitSchema(t *testing.T) {
+	// Test that ALTER TABLE with explicit schema affects the correct table
+	sql := `
+		CREATE TABLE auth.users (id INTEGER);
+		CREATE TABLE public.users (id INTEGER);
+		ALTER TABLE auth.users ENABLE ROW LEVEL SECURITY;
+	`
+
+	schema, err := ParseSQLSchemaWithDialect(sql, database.DialectPostgres)
+	if err != nil {
+		t.Fatalf("ParseSQLSchemaWithDialect failed: %v", err)
+	}
+
+	if len(schema.Tables) != 2 {
+		t.Fatalf("Expected 2 tables, got %d", len(schema.Tables))
+	}
+
+	// Find auth.users and public.users
+	var authUsers, publicUsers *database.Table
+	for i := range schema.Tables {
+		if schema.Tables[i].Name == "users" && schema.Tables[i].Schema == "auth" {
+			authUsers = &schema.Tables[i]
+		}
+		if schema.Tables[i].Name == "users" && schema.Tables[i].Schema == "public" {
+			publicUsers = &schema.Tables[i]
+		}
+	}
+
+	if authUsers == nil {
+		t.Fatal("Expected to find auth.users table")
+	}
+	if publicUsers == nil {
+		t.Fatal("Expected to find public.users table")
+	}
+
+	// ALTER TABLE auth.users should only affect auth.users
+	if !authUsers.RLSEnabled {
+		t.Error("Expected auth.users to have RLS enabled")
+	}
+	if publicUsers.RLSEnabled {
+		t.Error("Expected public.users to have RLS disabled (ALTER TABLE should not affect it)")
+	}
+}

@@ -357,12 +357,21 @@ func parseAlterTable(schema *database.Schema, stmt *pg_query.AlterTableStmt) err
 	tableName := stmt.Relation.Relname
 	tableSchema := stmt.Relation.Schemaname
 
+	// If no schema specified, default to "public" (matches CREATE TABLE behavior)
+	if tableSchema == "" {
+		tableSchema = "public"
+	}
+
 	// Find the table in the schema (match by both schema and name)
 	var tableIndex = -1
 	for i, table := range schema.Tables {
-		// If ALTER TABLE doesn't specify a schema, it could match any table with that name
-		// (in practice, it would use the search_path, but we'll match the first one)
-		if table.Name == tableName && (tableSchema == "" || table.Schema == tableSchema) {
+		// Match by (schema, name) - treating empty schema as "public"
+		tblSchema := table.Schema
+		if tblSchema == "" {
+			tblSchema = "public"
+		}
+
+		if table.Name == tableName && tblSchema == tableSchema {
 			tableIndex = i
 			break
 		}
