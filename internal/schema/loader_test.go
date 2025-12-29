@@ -3,6 +3,7 @@ package schema
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/lockplane/lockplane/internal/database"
@@ -399,5 +400,276 @@ func TestLoadSchemaMultipleFilesInOrder(t *testing.T) {
 	comments := schema.Tables[2]
 	if comments.Name != "comments" {
 		t.Errorf("Expected third table to be 'comments', got %q", comments.Name)
+	}
+}
+
+func TestLoadSchemaDuplicateTableInSameFile(t *testing.T) {
+	tempDir := t.TempDir()
+	sqlFile := filepath.Join(tempDir, "duplicate.lp.sql")
+
+	// Define the same table twice in one file
+	sqlContent := `
+		CREATE TABLE users (id INTEGER);
+		CREATE TABLE users (id BIGINT, email TEXT);
+	`
+	if err := os.WriteFile(sqlFile, []byte(sqlContent), 0600); err != nil {
+		t.Fatalf("Failed to write SQL file: %v", err)
+	}
+
+	_, err := LoadSchema(sqlFile)
+	if err == nil {
+		t.Fatal("Expected error for duplicate table definition, got nil")
+	}
+
+	expectedErr := `table "public.users" is defined multiple times`
+	if err.Error() != expectedErr {
+		t.Errorf("Expected error %q, got %q", expectedErr, err.Error())
+	}
+}
+
+func TestLoadSchemaDuplicateTableAcrossFiles(t *testing.T) {
+	tempDir := t.TempDir()
+
+	// First file
+	file1 := filepath.Join(tempDir, "users1.lp.sql")
+	if err := os.WriteFile(file1, []byte(`CREATE TABLE users (id INTEGER);`), 0600); err != nil {
+		t.Fatalf("Failed to write file1: %v", err)
+	}
+
+	// Second file with duplicate table
+	file2 := filepath.Join(tempDir, "users2.lp.sql")
+	if err := os.WriteFile(file2, []byte(`CREATE TABLE users (id BIGINT);`), 0600); err != nil {
+		t.Fatalf("Failed to write file2: %v", err)
+	}
+
+	_, err := LoadSchema(tempDir)
+	if err == nil {
+		t.Fatal("Expected error for duplicate table across files, got nil")
+	}
+
+	expectedErr := `table "public.users" is defined multiple times`
+	if err.Error() != expectedErr {
+		t.Errorf("Expected error %q, got %q", expectedErr, err.Error())
+	}
+}
+
+func TestLoadSchemaMultipleDuplicateTables(t *testing.T) {
+	tempDir := t.TempDir()
+
+	// First file
+	file1 := filepath.Join(tempDir, "01_tables.lp.sql")
+	if err := os.WriteFile(file1, []byte(`
+		CREATE TABLE users (id INTEGER);
+		CREATE TABLE posts (id INTEGER);
+	`), 0600); err != nil {
+		t.Fatalf("Failed to write file1: %v", err)
+	}
+
+	// Second file with multiple duplicates
+	file2 := filepath.Join(tempDir, "02_duplicates.lp.sql")
+	if err := os.WriteFile(file2, []byte(`
+		CREATE TABLE users (id BIGINT);
+		CREATE TABLE posts (id BIGINT);
+	`), 0600); err != nil {
+		t.Fatalf("Failed to write file2: %v", err)
+	}
+
+	_, err := LoadSchema(tempDir)
+	if err == nil {
+		t.Fatal("Expected error for multiple duplicate tables, got nil")
+	}
+
+	// Should mention multiple tables with schema prefix
+	if !strings.Contains(err.Error(), "public.users") {
+		t.Errorf("Expected error to mention 'public.users', got %q", err.Error())
+	}
+	if !strings.Contains(err.Error(), "public.posts") {
+		t.Errorf("Expected error to mention 'public.posts', got %q", err.Error())
+	}
+	if !strings.Contains(err.Error(), "defined multiple times") {
+		t.Errorf("Expected error to say 'defined multiple times', got %q", err.Error())
+	}
+}
+
+func TestLoadSchemaDuplicateWithOtherTables(t *testing.T) {
+	tempDir := t.TempDir()
+
+	file1 := filepath.Join(tempDir, "01_schema.lp.sql")
+	if err := os.WriteFile(file1, []byte(`
+		CREATE TABLE users (id INTEGER);
+		CREATE TABLE posts (id INTEGER);
+		CREATE TABLE comments (id INTEGER);
+	`), 0600); err != nil {
+		t.Fatalf("Failed to write file1: %v", err)
+	}
+
+	file2 := filepath.Join(tempDir, "02_duplicate.lp.sql")
+	if err := os.WriteFile(file2, []byte(`
+		CREATE TABLE tags (id INTEGER);
+		CREATE TABLE posts (id BIGINT);
+	`), 0600); err != nil {
+		t.Fatalf("Failed to write file2: %v", err)
+	}
+
+	_, err := LoadSchema(tempDir)
+	if err == nil {
+		t.Fatal("Expected error for duplicate 'posts' table, got nil")
+	}
+
+	// Should specifically mention the duplicate table with schema
+	expectedErr := `table "public.posts" is defined multiple times`
+	if err.Error() != expectedErr {
+		t.Errorf("Expected error %q, got %q", expectedErr, err.Error())
+	}
+}
+
+func TestLoadSchemaSameTableNameDifferentSchemas(t *testing.T) {
+	tempDir := t.TempDir()
+
+	// Same table name "users" in different schemas should be allowed
+	sqlFile := filepath.Join(tempDir, "multi_schema.lp.sql")
+	sqlContent := `
+		CREATE TABLE public.users (id INTEGER);
+		CREATE TABLE auth.users (id BIGINT, email TEXT);
+	`
+	if err := os.WriteFile(sqlFile, []byte(sqlContent), 0600); err != nil {
+		t.Fatalf("Failed to write SQL file: %v", err)
+	}
+
+	schema, err := LoadSchema(sqlFile)
+	if err != nil {
+		t.Fatalf("Expected no error for same table name in different schemas, got: %v", err)
+	}
+
+	if len(schema.Tables) != 2 {
+		t.Fatalf("Expected 2 tables, got %d", len(schema.Tables))
+	}
+
+	// Verify both tables are present with correct schemas
+	foundPublic := false
+	foundAuth := false
+	for _, table := range schema.Tables {
+		if table.Name == "users" && table.Schema == "public" {
+			foundPublic = true
+		}
+		if table.Name == "users" && table.Schema == "auth" {
+			foundAuth = true
+		}
+	}
+
+	if !foundPublic {
+		t.Error("Expected to find public.users")
+	}
+	if !foundAuth {
+		t.Error("Expected to find auth.users")
+	}
+}
+
+func TestLoadSchemaDuplicateImplicitAndExplicitPublic(t *testing.T) {
+	tempDir := t.TempDir()
+
+	// Table without schema (defaults to public) and explicit public.table should be duplicate
+	sqlFile := filepath.Join(tempDir, "implicit_explicit.lp.sql")
+	sqlContent := `
+		CREATE TABLE users (id INTEGER);
+		CREATE TABLE public.users (id BIGINT);
+	`
+	if err := os.WriteFile(sqlFile, []byte(sqlContent), 0600); err != nil {
+		t.Fatalf("Failed to write SQL file: %v", err)
+	}
+
+	_, err := LoadSchema(sqlFile)
+	if err == nil {
+		t.Fatal("Expected error for duplicate implicit/explicit public.users, got nil")
+	}
+
+	expectedErr := `table "public.users" is defined multiple times`
+	if err.Error() != expectedErr {
+		t.Errorf("Expected error %q, got %q", expectedErr, err.Error())
+	}
+}
+
+func TestLoadSchemaDifferentSchemasAcrossFiles(t *testing.T) {
+	tempDir := t.TempDir()
+
+	// First file with public.users
+	file1 := filepath.Join(tempDir, "public_users.lp.sql")
+	if err := os.WriteFile(file1, []byte(`CREATE TABLE public.users (id INTEGER);`), 0600); err != nil {
+		t.Fatalf("Failed to write file1: %v", err)
+	}
+
+	// Second file with auth.users (different schema, same name - should be OK)
+	file2 := filepath.Join(tempDir, "auth_users.lp.sql")
+	if err := os.WriteFile(file2, []byte(`CREATE TABLE auth.users (id BIGINT);`), 0600); err != nil {
+		t.Fatalf("Failed to write file2: %v", err)
+	}
+
+	schema, err := LoadSchema(tempDir)
+	if err != nil {
+		t.Fatalf("Expected no error for same table name in different schemas, got: %v", err)
+	}
+
+	if len(schema.Tables) != 2 {
+		t.Fatalf("Expected 2 tables, got %d", len(schema.Tables))
+	}
+}
+
+func TestLoadSchemaCaseSensitivity(t *testing.T) {
+	tempDir := t.TempDir()
+
+	tests := []struct {
+		name        string
+		sql         string
+		expectError bool
+		description string
+	}{
+		{
+			name:        "unquoted_mixed_case_not_duplicate",
+			sql:         `CREATE TABLE Users (id INTEGER); CREATE TABLE users (id BIGINT);`,
+			expectError: true,
+			description: "Unquoted identifiers are normalized to lowercase, so Users and users are duplicates",
+		},
+		{
+			name:        "quoted_mixed_case_not_duplicate",
+			sql:         `CREATE TABLE "Users" (id INTEGER); CREATE TABLE users (id BIGINT);`,
+			expectError: false,
+			description: "Quoted 'Users' preserves case, unquoted 'users' is lowercase - different tables",
+		},
+		{
+			name:        "quoted_exact_duplicate",
+			sql:         `CREATE TABLE "Users" (id INTEGER); CREATE TABLE "Users" (id BIGINT);`,
+			expectError: true,
+			description: "Quoted identifiers with same case are duplicates",
+		},
+		{
+			name:        "schema_case_sensitivity",
+			sql:         `CREATE TABLE Public.users (id INTEGER); CREATE TABLE public.users (id BIGINT);`,
+			expectError: true,
+			description: "Unquoted 'Public' normalized to 'public' - both are same schema",
+		},
+		{
+			name:        "schema_quoted_case",
+			sql:         `CREATE TABLE "Public".users (id INTEGER); CREATE TABLE public.users (id BIGINT);`,
+			expectError: false,
+			description: "Quoted 'Public' and unquoted 'public' are different schemas",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			sqlFile := filepath.Join(tempDir, tt.name+".lp.sql")
+			if err := os.WriteFile(sqlFile, []byte(tt.sql), 0600); err != nil {
+				t.Fatalf("Failed to write SQL file: %v", err)
+			}
+
+			_, err := LoadSchema(sqlFile)
+
+			if tt.expectError && err == nil {
+				t.Errorf("%s: Expected error but got none", tt.description)
+			}
+			if !tt.expectError && err != nil {
+				t.Errorf("%s: Expected no error but got: %v", tt.description, err)
+			}
+		})
 	}
 }

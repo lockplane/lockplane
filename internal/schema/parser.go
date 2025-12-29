@@ -72,6 +72,7 @@ func parseCreateTable(stmt *pg_query.CreateStmt) (*database.Table, error) {
 
 	table := &database.Table{
 		Name:    stmt.Relation.Relname,
+		Schema:  stmt.Relation.Schemaname, // Extract schema name if specified
 		Columns: []database.Column{},
 		// Indexes:     []database.Index{},
 		// ForeignKeys: []database.ForeignKey{},
@@ -354,11 +355,23 @@ func parseAlterTable(schema *database.Schema, stmt *pg_query.AlterTableStmt) err
 	}
 
 	tableName := stmt.Relation.Relname
+	tableSchema := stmt.Relation.Schemaname
 
-	// Find the table in the schema
+	// If no schema specified, default to "public" (matches CREATE TABLE behavior)
+	if tableSchema == "" {
+		tableSchema = "public"
+	}
+
+	// Find the table in the schema (match by both schema and name)
 	var tableIndex = -1
 	for i, table := range schema.Tables {
-		if table.Name == tableName {
+		// Match by (schema, name) - treating empty schema as "public"
+		tblSchema := table.Schema
+		if tblSchema == "" {
+			tblSchema = "public"
+		}
+
+		if table.Name == tableName && tblSchema == tableSchema {
 			tableIndex = i
 			break
 		}
