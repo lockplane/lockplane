@@ -100,16 +100,29 @@ func loadSQLSchemaFromBytes(data []byte) (*database.Schema, error) {
 	return schema, nil
 }
 
-// validateNoDuplicateTables checks that each table is defined only once
+// validateNoDuplicateTables checks that each table is defined only once within its schema.
+// Tables with the same name can exist in different schemas (e.g., public.users and auth.users),
+// but the same table cannot be defined multiple times in the same schema.
+// If no schema is specified, it defaults to "public".
 func validateNoDuplicateTables(schema *database.Schema) error {
+	// Use (schema, name) as the key to identify unique tables
 	seen := make(map[string]bool)
 	var duplicates []string
 
 	for _, table := range schema.Tables {
-		if seen[table.Name] {
-			duplicates = append(duplicates, table.Name)
+		// Default to "public" schema if not specified
+		tableSchema := table.Schema
+		if tableSchema == "" {
+			tableSchema = "public"
 		}
-		seen[table.Name] = true
+
+		// Create a composite key: schema.table_name
+		key := fmt.Sprintf("%s.%s", tableSchema, table.Name)
+
+		if seen[key] {
+			duplicates = append(duplicates, key)
+		}
+		seen[key] = true
 	}
 
 	if len(duplicates) > 0 {
