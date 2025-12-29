@@ -39,6 +39,15 @@ CREATE TABLE users (
 For now, schema files must be in the root of the `schema/` directory, and must
 end in `.lp.sql`.
 
+Lockplane supports PostgreSQL schemas. Tables with the same name can exist in different schemas:
+
+```sql
+CREATE TABLE public.users (id BIGINT PRIMARY KEY);
+CREATE TABLE auth.users (id BIGINT PRIMARY KEY, email TEXT);
+```
+
+If no schema is specified in `CREATE TABLE`, Lockplane assumes the `public` schema. If your database uses a different default schema, you should explicitly qualify table names in your `.lp.sql` files.
+
 ## 4. Check the schema for issues
 
 ```bash

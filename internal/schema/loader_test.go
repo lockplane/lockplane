@@ -613,3 +613,63 @@ func TestLoadSchemaDifferentSchemasAcrossFiles(t *testing.T) {
 		t.Fatalf("Expected 2 tables, got %d", len(schema.Tables))
 	}
 }
+
+func TestLoadSchemaCaseSensitivity(t *testing.T) {
+	tempDir := t.TempDir()
+
+	tests := []struct {
+		name        string
+		sql         string
+		expectError bool
+		description string
+	}{
+		{
+			name:        "unquoted_mixed_case_not_duplicate",
+			sql:         `CREATE TABLE Users (id INTEGER); CREATE TABLE users (id BIGINT);`,
+			expectError: true,
+			description: "Unquoted identifiers are normalized to lowercase, so Users and users are duplicates",
+		},
+		{
+			name:        "quoted_mixed_case_not_duplicate",
+			sql:         `CREATE TABLE "Users" (id INTEGER); CREATE TABLE users (id BIGINT);`,
+			expectError: false,
+			description: "Quoted 'Users' preserves case, unquoted 'users' is lowercase - different tables",
+		},
+		{
+			name:        "quoted_exact_duplicate",
+			sql:         `CREATE TABLE "Users" (id INTEGER); CREATE TABLE "Users" (id BIGINT);`,
+			expectError: true,
+			description: "Quoted identifiers with same case are duplicates",
+		},
+		{
+			name:        "schema_case_sensitivity",
+			sql:         `CREATE TABLE Public.users (id INTEGER); CREATE TABLE public.users (id BIGINT);`,
+			expectError: true,
+			description: "Unquoted 'Public' normalized to 'public' - both are same schema",
+		},
+		{
+			name:        "schema_quoted_case",
+			sql:         `CREATE TABLE "Public".users (id INTEGER); CREATE TABLE public.users (id BIGINT);`,
+			expectError: false,
+			description: "Quoted 'Public' and unquoted 'public' are different schemas",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			sqlFile := filepath.Join(tempDir, tt.name+".lp.sql")
+			if err := os.WriteFile(sqlFile, []byte(tt.sql), 0600); err != nil {
+				t.Fatalf("Failed to write SQL file: %v", err)
+			}
+
+			_, err := LoadSchema(sqlFile)
+
+			if tt.expectError && err == nil {
+				t.Errorf("%s: Expected error but got none", tt.description)
+			}
+			if !tt.expectError && err != nil {
+				t.Errorf("%s: Expected no error but got: %v", tt.description, err)
+			}
+		})
+	}
+}
