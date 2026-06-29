@@ -1,8 +1,9 @@
+🚨 Status: Alpha software! this is still a playground for learning golang, postgres & ai tools 🚨 
+
+
 # Lockplane
 
 Easy postgres schema management.
-
-Status: Alpha software! this is still a playground for learning golang, postgres & ai tools
 
 [![Test](https://github.com/lockplane/lockplane/actions/workflows/test.yml/badge.svg)](https://github.com/lockplane/lockplane/actions/workflows/test.yml)
 [![codecov](https://codecov.io/github/lockplane/lockplane/graph/badge.svg?token=JP0QINP1G1)](https://codecov.io/github/lockplane/lockplane)
