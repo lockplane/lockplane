@@ -1,7 +1,7 @@
+# Lockplane
+
 🚨 Status: Alpha software! this is still a playground for learning golang, postgres & ai tools 🚨 
 
-
-# Lockplane
 
 Easy postgres schema management.
 
